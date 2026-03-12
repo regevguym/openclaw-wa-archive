@@ -30,7 +30,7 @@ export function buildWaStatsTool(allowFrom: string[]) {
       },
     },
     allowFrom,
-    execute: (params: StatsParams) => {
+    execute: (_callId: string, params: StatsParams) => {
       try {
         return executeStats(params);
       } catch (err) {

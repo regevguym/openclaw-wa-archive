@@ -69,7 +69,7 @@ export function buildWaSearchTool(allowFrom: string[]) {
       required: ['query'],
     },
     allowFrom,
-    execute: async (params: SearchParams) => {
+    execute: async (_callId: string, params: SearchParams) => {
       try {
         return await executeSearch(params);
       } catch (err) {
