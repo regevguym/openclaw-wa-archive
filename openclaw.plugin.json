@@ -1,0 +1,32 @@
+{
+  "id": "wa-archive",
+  "name": "WhatsApp Archive",
+  "description": "Archives all WhatsApp messages with full-text and semantic search",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "dataDir": {
+        "type": "string",
+        "description": "Directory for database and media files (default: plugin data/ dir)"
+      },
+      "enableEmbeddings": {
+        "type": "boolean",
+        "description": "Enable semantic/vector search via OpenAI embeddings (default: true)"
+      },
+      "embeddingModel": {
+        "type": "string",
+        "description": "OpenAI embedding model (default: text-embedding-3-small)"
+      },
+      "mediaDownload": {
+        "type": "boolean",
+        "description": "Download and store media files locally (default: true)"
+      },
+      "allowFrom": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Phone numbers allowed to use search tools (default: owner only)"
+      }
+    }
+  }
+}
