@@ -74,7 +74,7 @@ async function processBatch(batch: EmbeddingQueueItem[]): Promise<void> {
 
   const db = getDb();
   const insertVec = db.prepare(
-    'INSERT OR REPLACE INTO messages_vec (message_rowid, embedding) VALUES (?, ?)'
+    'INSERT OR REPLACE INTO messages_vec (message_rowid, embedding) VALUES (CAST(? AS INTEGER), ?)'
   );
 
   const transaction = db.transaction(() => {
