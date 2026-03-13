@@ -85,6 +85,19 @@ export function initDb(dataDir: string): Database.Database {
     END;
   `);
 
+  // Add token usage columns (migration — safe to run multiple times)
+  const cols = (db.pragma('table_info(messages)') as any[]).map((c: any) => c.name);
+  if (!cols.includes('input_tokens')) {
+    db.exec(`
+      ALTER TABLE messages ADD COLUMN input_tokens INTEGER DEFAULT NULL;
+      ALTER TABLE messages ADD COLUMN output_tokens INTEGER DEFAULT NULL;
+      ALTER TABLE messages ADD COLUMN cache_read_tokens INTEGER DEFAULT NULL;
+      ALTER TABLE messages ADD COLUMN cache_write_tokens INTEGER DEFAULT NULL;
+      ALTER TABLE messages ADD COLUMN total_tokens INTEGER DEFAULT NULL;
+      ALTER TABLE messages ADD COLUMN cost_usd REAL DEFAULT NULL;
+    `);
+  }
+
   // Try to load sqlite-vec extension
   try {
     const sqliteVec = require('sqlite-vec');
@@ -145,6 +158,12 @@ export interface MessageRow {
   account_id?: string | null;
   metadata?: string | null;
   created_at: number;
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  cache_read_tokens?: number | null;
+  cache_write_tokens?: number | null;
+  total_tokens?: number | null;
+  cost_usd?: number | null;
 }
 
 export function insertMessage(msg: MessageRow): void {
@@ -198,6 +217,37 @@ export function getMessageRowid(messageId: string): number | null {
   const sql = `SELECT rowid FROM messages WHERE id = @id`;
   const row = getStmt(sql).get({ id: messageId }) as { rowid: number } | undefined;
   return row?.rowid ?? null;
+}
+
+export interface UsageData {
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_read_tokens?: number;
+  cache_write_tokens?: number;
+  total_tokens?: number;
+  cost_usd?: number;
+}
+
+export function updateMessageUsage(messageId: string, usage: UsageData): void {
+  const sql = `
+    UPDATE messages SET
+      input_tokens = @input_tokens,
+      output_tokens = @output_tokens,
+      cache_read_tokens = @cache_read_tokens,
+      cache_write_tokens = @cache_write_tokens,
+      total_tokens = @total_tokens,
+      cost_usd = @cost_usd
+    WHERE id = @id
+  `;
+  getStmt(sql).run({
+    id: messageId,
+    input_tokens: usage.input_tokens ?? null,
+    output_tokens: usage.output_tokens ?? null,
+    cache_read_tokens: usage.cache_read_tokens ?? null,
+    cache_write_tokens: usage.cache_write_tokens ?? null,
+    total_tokens: usage.total_tokens ?? null,
+    cost_usd: usage.cost_usd ?? null,
+  });
 }
 
 export function insertBatch(messages: MessageRow[]): void {
