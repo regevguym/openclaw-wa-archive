@@ -34,18 +34,10 @@ export function register(api: any) {
     configureMedia(dataDir);
   }
 
-  // 4. Register message hooks
-  api.registerHook('message:received', handleMessageReceived, {
-    description: 'Archive inbound WhatsApp messages',
-  });
-
-  api.registerHook('message:sent', handleMessageSent, {
-    description: 'Archive outbound WhatsApp messages',
-  });
-
-  api.registerHook('message:preprocessed', handleMessagePreprocessed, {
-    description: 'Update archived messages with preprocessed content',
-  });
+  // 4. Register message hooks (use api.on for typed hooks)
+  api.on('message_received', handleMessageReceived);
+  api.on('message_sent', handleMessageSent);
+  api.on('message_preprocessed', handleMessagePreprocessed);
 
   // 5. Register tools
   const allowFrom = config.allowFrom || ['+972547552872'];
@@ -67,6 +59,8 @@ export function register(api: any) {
   // 7. Register cleanup on shutdown
   api.registerHook?.('shutdown', () => {
     closeDb();
+  }, {
+    name: 'wa-archive:shutdown',
   });
 
   console.log('[wa-archive] Plugin loaded successfully');

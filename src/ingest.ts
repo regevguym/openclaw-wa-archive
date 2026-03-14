@@ -6,27 +6,28 @@ import { queueMediaDownload } from './media';
 export function handleMessageReceived(event: any): void {
   try {
     const ctx = event?.context || event;
-    const channelId = ctx.channelId || ctx.channel;
-    if (channelId !== 'whatsapp') return;
+    const metadata = ctx.metadata || event.metadata || {};
+    const channelId = ctx.channelId || ctx.channel || metadata.channel || metadata.provider;
+    // Skip non-whatsapp if channelId is known and not whatsapp
+    if (channelId && channelId !== 'whatsapp') return;
 
-    const messageId = ctx.messageId || ctx.id || randomUUID();
-    const metadata = ctx.metadata || {};
+    const messageId = ctx.messageId || ctx.id || event.messageId || randomUUID();
     const isGroup = metadata.isGroup || false;
     const chatId = isGroup
-      ? metadata.groupId || ctx.conversationId || ctx.from
-      : ctx.conversationId || ctx.from;
+      ? metadata.groupId || ctx.conversationId || ctx.from || event.from
+      : ctx.conversationId || ctx.from || event.from;
     const chatType = isGroup ? 'group' : 'direct';
 
     insertMessage({
       id: messageId,
-      session_key: ctx.sessionKey || null,
+      session_key: ctx.sessionKey || event.sessionKey || null,
       chat_id: chatId,
       chat_type: chatType,
       chat_name: metadata.groupName || metadata.contactName || null,
-      sender_id: metadata.senderE164 || ctx.from || null,
+      sender_id: metadata.senderE164 || ctx.from || event.from || null,
       sender_name: metadata.senderName || metadata.pushName || null,
-      timestamp: ctx.timestamp || Date.now(),
-      content: ctx.content || ctx.body || null,
+      timestamp: ctx.timestamp || event.timestamp || Date.now(),
+      content: ctx.content || ctx.body || event.content || null,
       media_local_path: null,
       media_url: metadata.mediaUrl || null,
       media_type: metadata.mediaType || null,
@@ -57,27 +58,28 @@ export function handleMessageReceived(event: any): void {
 export function handleMessageSent(event: any): void {
   try {
     const ctx = event?.context || event;
-    const channelId = ctx.channelId || ctx.channel;
-    if (channelId !== 'whatsapp') return;
+    const metadata = ctx.metadata || event.metadata || {};
+    const channelId = ctx.channelId || ctx.channel || metadata.channel || metadata.provider;
+    if (channelId && channelId !== 'whatsapp') return;
     if (ctx.success === false) return;
 
-    const messageId = ctx.messageId || ctx.id || randomUUID();
-    const isGroup = ctx.isGroup || false;
+    const messageId = ctx.messageId || ctx.id || event.messageId || randomUUID();
+    const isGroup = ctx.isGroup || event.isGroup || false;
     const chatId = isGroup
-      ? ctx.groupId || ctx.conversationId || ctx.to
-      : ctx.conversationId || ctx.to;
+      ? ctx.groupId || ctx.conversationId || ctx.to || event.to
+      : ctx.conversationId || ctx.to || event.to;
     const chatType = isGroup ? 'group' : 'direct';
 
     insertMessage({
       id: messageId,
-      session_key: ctx.sessionKey || null,
+      session_key: ctx.sessionKey || event.sessionKey || null,
       chat_id: chatId,
       chat_type: chatType,
       chat_name: ctx.groupName || ctx.contactName || null,
       sender_id: null,
-      sender_name: null,
-      timestamp: ctx.timestamp || Date.now(),
-      content: ctx.content || ctx.body || null,
+      sender_name: 'Nymeria',
+      timestamp: ctx.timestamp || event.timestamp || Date.now(),
+      content: ctx.content || ctx.body || event.content || null,
       media_local_path: null,
       media_url: null,
       media_type: null,
@@ -102,8 +104,9 @@ export function handleMessageSent(event: any): void {
 export function handleMessagePreprocessed(event: any): void {
   try {
     const ctx = event?.context || event;
-    const channelId = ctx.channelId || ctx.channel;
-    if (channelId !== 'whatsapp') return;
+    const metadata = ctx.metadata || event.metadata || {};
+    const channelId = ctx.channelId || ctx.channel || metadata.channel || metadata.provider;
+    if (channelId && channelId !== 'whatsapp') return;
 
     const messageId = ctx.messageId || ctx.id;
     if (!messageId) return;
