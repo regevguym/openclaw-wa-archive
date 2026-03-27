@@ -2,10 +2,10 @@ import path from 'path';
 import { initDb, closeDb } from './db';
 import { configureEmbeddings } from './embeddings';
 import { configureMedia } from './media';
-import { handleMessageReceived, handleMessageSent, handleMessagePreprocessed } from './ingest';
+import { handleMessageReceived, handleMessageSent, handleMessagePreprocessed, setOutboundSenderName } from './ingest';
 import { buildWaSearchTool } from './tools/wa-search';
 import { buildWaStatsTool } from './tools/wa-stats';
-import { runBackfill } from './backfill';
+import { runBackfill, setBackfillSenderName } from './backfill';
 
 export function register(api: any) {
   const config = api.getConfig?.() || {};
@@ -28,6 +28,11 @@ export function register(api: any) {
     model: config.embeddingModel || 'text-embedding-3-small',
     enabled: enableEmbeddings,
   });
+
+  // 2b. Configure outbound sender name
+  const botName = config.botName || config.agentName || 'Me';
+  setOutboundSenderName(botName);
+  setBackfillSenderName(botName);
 
   // 3. Configure media
   if (config.mediaDownload !== false) {

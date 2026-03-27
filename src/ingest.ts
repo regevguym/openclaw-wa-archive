@@ -3,6 +3,12 @@ import { insertMessage, updateMessageContent } from './db';
 import { queueEmbedding } from './embeddings';
 import { queueMediaDownload } from './media';
 
+let outboundSenderName = 'Me';
+
+export function setOutboundSenderName(name: string): void {
+  outboundSenderName = name;
+}
+
 export function handleMessageReceived(event: any): void {
   try {
     const ctx = event?.context || event;
@@ -77,7 +83,7 @@ export function handleMessageSent(event: any): void {
       chat_type: chatType,
       chat_name: ctx.groupName || ctx.contactName || null,
       sender_id: null,
-      sender_name: 'Nymeria',
+      sender_name: outboundSenderName,
       timestamp: ctx.timestamp || event.timestamp || Date.now(),
       content: ctx.content || ctx.body || event.content || null,
       media_local_path: null,

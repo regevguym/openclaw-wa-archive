@@ -4,6 +4,12 @@ import { randomUUID } from 'crypto';
 import { insertBatch, MessageRow } from './db';
 import { queueEmbedding } from './embeddings';
 
+let outboundSenderName = 'Me';
+
+export function setBackfillSenderName(name: string): void {
+  outboundSenderName = name;
+}
+
 const SESSIONS_DIR = path.join(
   process.env.HOME || '~',
   '.openclaw',
@@ -185,7 +191,7 @@ async function processSessionFile(
             chat_type: chatType,
             chat_name: chatName,
             sender_id: null,
-            sender_name: 'Nymeria',
+            sender_name: outboundSenderName,
             timestamp: entryTimestamp,
             content: textContent,
             media_local_path: null,
@@ -230,7 +236,7 @@ async function processSessionFile(
                 chat_type: chatType,
                 chat_name: chatName,
                 sender_id: null,
-                sender_name: 'Nymeria',
+                sender_name: outboundSenderName,
                 timestamp: entryTimestamp,
                 content: msgContent,
                 media_local_path: null,
