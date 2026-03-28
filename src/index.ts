@@ -45,7 +45,7 @@ export function register(api: any) {
   api.on('message_preprocessed', handleMessagePreprocessed);
 
   // 5. Register tools
-  const allowFrom = config.allowFrom || ['+972547552872'];
+  const allowFrom = config.allowFrom || [];
 
   api.registerTool(buildWaSearchTool(allowFrom));
   api.registerTool(buildWaStatsTool(allowFrom));

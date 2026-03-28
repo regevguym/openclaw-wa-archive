@@ -96,7 +96,7 @@ async function processSessionFile(
 
   // Derive chat info from session key and metadata
   // Session keys look like: agent:main:whatsapp:group:120363406381938883@g.us
-  //                     or: agent:main:whatsapp:direct:+972547552872
+  //                     or: agent:main:whatsapp:direct:+972XXXXXXXXX
   const keyParts = sessionKey.split(':');
   const chatType = sessionMeta?.chatType || (keyParts[3] === 'group' ? 'group' : 'direct');
   const chatId = sessionMeta?.groupId || keyParts[4] || sessionMeta?.conversationId || sessionKey;
