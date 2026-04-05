@@ -113,6 +113,27 @@ function executeStats(params: StatsParams): object {
   const inbound = directionStats.find((d) => d.direction === 'inbound')?.count || 0;
   const outbound = directionStats.find((d) => d.direction === 'outbound')?.count || 0;
 
+  // Token usage and cost summary
+  const usageRow = db
+    .prepare(
+      `SELECT
+        COALESCE(SUM(input_tokens), 0) AS input_tokens,
+        COALESCE(SUM(output_tokens), 0) AS output_tokens,
+        COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
+        COALESCE(SUM(total_tokens), 0) AS total_tokens,
+        COALESCE(SUM(cost_usd), 0) AS cost_usd,
+        COUNT(CASE WHEN cost_usd > 0 THEN 1 END) AS messages_with_cost
+       FROM messages ${where}`
+    )
+    .get(bindParams) as {
+      input_tokens: number;
+      output_tokens: number;
+      cache_read_tokens: number;
+      total_tokens: number;
+      cost_usd: number;
+      messages_with_cost: number;
+    };
+
   return {
     period,
     total: totalRow.total,
@@ -129,6 +150,14 @@ function executeStats(params: StatsParams): object {
       count: h.count,
     })),
     direction: { inbound, outbound },
+    usage: {
+      input_tokens: usageRow.input_tokens,
+      output_tokens: usageRow.output_tokens,
+      cache_read_tokens: usageRow.cache_read_tokens,
+      total_tokens: usageRow.total_tokens,
+      cost_usd: Math.round(usageRow.cost_usd * 1000) / 1000,
+      messages_with_cost: usageRow.messages_with_cost,
+    },
   };
 }
 
