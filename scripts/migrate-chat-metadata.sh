@@ -37,6 +37,14 @@ BACKUP_PATH="${DB_PATH}.bak.$(date +%Y%m%d%H%M%S)"
 cp "$DB_PATH" "$BACKUP_PATH"
 echo "📦 Backup created: $BACKUP_PATH"
 
+# Drop FTS triggers temporarily (they block UPDATE on non-content columns)
+sqlite3 "$DB_PATH" "
+  DROP TRIGGER IF EXISTS messages_au;
+  DROP TRIGGER IF EXISTS messages_ad;
+  DROP TRIGGER IF EXISTS messages_ai;
+"
+echo "🔧 FTS triggers dropped temporarily"
+
 # Fix 1: chat_type for group chats
 GROUPS_FIXED=$(sqlite3 "$DB_PATH" "
   UPDATE messages 
@@ -54,6 +62,21 @@ SENDER_FIXED=$(sqlite3 "$DB_PATH" "
   SELECT changes();
 ")
 echo "✅ Fix 2: sender_name — $SENDER_FIXED outbound messages fixed (Me → $BOT_NAME)"
+
+# Recreate FTS triggers
+sqlite3 "$DB_PATH" "
+  CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
+    INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
+  END;
+  CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
+    INSERT INTO messages_fts(messages_fts, rowid, content) VALUES('delete', old.rowid, old.content);
+  END;
+  CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON messages BEGIN
+    INSERT INTO messages_fts(messages_fts, rowid, content) VALUES('delete', old.rowid, old.content);
+    INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
+  END;
+"
+echo "🔧 FTS triggers restored"
 
 # Verify
 echo ""
