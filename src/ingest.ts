@@ -9,6 +9,25 @@ export function setOutboundSenderName(name: string): void {
   outboundSenderName = name;
 }
 
+/** Derive whether a chat ID represents a group (WhatsApp groups end with @g.us) */
+function deriveIsGroup(chatId: string | undefined, metadata: any, ctx: any): boolean {
+  if (metadata.isGroup === true || ctx.isGroup === true) return true;
+  if (chatId && chatId.endsWith('@g.us')) return true;
+  return false;
+}
+
+/** Resolve the chat ID from event context */
+function resolveChatId(ctx: any, metadata: any, fallback: string | undefined): string {
+  return metadata.groupId || metadata.originatingTo || ctx.conversationId || fallback || '';
+}
+
+/** Resolve chat name from all available metadata fields */
+function resolveChatName(metadata: any, ctx: any): string | null {
+  return metadata.groupName || metadata.groupSubject || metadata.subject
+    || ctx.groupName || ctx.groupSubject || ctx.subject
+    || metadata.contactName || ctx.contactName || null;
+}
+
 export function handleMessageReceived(event: any): void {
   try {
     const ctx = event?.context || event;
@@ -18,10 +37,8 @@ export function handleMessageReceived(event: any): void {
     if (channelId && channelId !== 'whatsapp') return;
 
     const messageId = ctx.messageId || ctx.id || event.messageId || randomUUID();
-    const isGroup = metadata.isGroup || false;
-    const chatId = isGroup
-      ? metadata.groupId || ctx.conversationId || ctx.from || event.from
-      : ctx.conversationId || ctx.from || event.from;
+    const chatId = resolveChatId(ctx, metadata, ctx.from || event.from);
+    const isGroup = deriveIsGroup(chatId, metadata, ctx);
     const chatType = isGroup ? 'group' : 'direct';
 
     insertMessage({
@@ -29,7 +46,7 @@ export function handleMessageReceived(event: any): void {
       session_key: ctx.sessionKey || event.sessionKey || null,
       chat_id: chatId,
       chat_type: chatType,
-      chat_name: metadata.groupName || metadata.contactName || null,
+      chat_name: resolveChatName(metadata, ctx),
       sender_id: metadata.senderE164 || ctx.from || event.from || null,
       sender_name: metadata.senderName || metadata.pushName || null,
       timestamp: ctx.timestamp || event.timestamp || Date.now(),
@@ -70,10 +87,8 @@ export function handleMessageSent(event: any): void {
     if (ctx.success === false) return;
 
     const messageId = ctx.messageId || ctx.id || event.messageId || randomUUID();
-    const isGroup = ctx.isGroup || event.isGroup || false;
-    const chatId = isGroup
-      ? ctx.groupId || ctx.conversationId || ctx.to || event.to
-      : ctx.conversationId || ctx.to || event.to;
+    const chatId = resolveChatId(ctx, metadata, ctx.to || event.to);
+    const isGroup = deriveIsGroup(chatId, metadata, ctx);
     const chatType = isGroup ? 'group' : 'direct';
 
     insertMessage({
@@ -81,7 +96,7 @@ export function handleMessageSent(event: any): void {
       session_key: ctx.sessionKey || event.sessionKey || null,
       chat_id: chatId,
       chat_type: chatType,
-      chat_name: ctx.groupName || ctx.contactName || null,
+      chat_name: resolveChatName(metadata, ctx),
       sender_id: null,
       sender_name: outboundSenderName,
       timestamp: ctx.timestamp || event.timestamp || Date.now(),
