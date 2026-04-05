@@ -2,10 +2,11 @@ import path from 'path';
 import { initDb, closeDb } from './db';
 import { configureEmbeddings } from './embeddings';
 import { configureMedia } from './media';
-import { handleMessageReceived, handleMessageSent, handleMessagePreprocessed, setOutboundSenderName } from './ingest';
+import { handleMessageReceived, handleMessageSent, handleMessagePreprocessed, handleMessageSending, setOutboundSenderName } from './ingest';
 import { buildWaSearchTool } from './tools/wa-search';
 import { buildWaStatsTool } from './tools/wa-stats';
 import { runBackfill, setBackfillSenderName } from './backfill';
+import { handleLlmOutput } from './costs';
 
 export function register(api: any) {
   const config = api.getConfig?.() || {};
@@ -39,10 +40,23 @@ export function register(api: any) {
     configureMedia(dataDir);
   }
 
-  // 4. Register message hooks (use api.on for typed hooks)
+  // 4. Register message hooks
+  // Legacy api.on hooks (backward compat — message_sent fires inconsistently for regular replies)
   api.on('message_received', handleMessageReceived);
   api.on('message_sent', handleMessageSent);
   api.on('message_preprocessed', handleMessagePreprocessed);
+
+  // Plugin hooks (reliable — fires for ALL outbound including regular agent replies)
+  api.registerHook?.('message_sending', handleMessageSending, {
+    name: 'wa-archive:message-sending',
+    description: 'Archive outbound messages before delivery',
+  });
+
+  // LLM output hook for token usage / cost tracking
+  api.registerHook?.('llm_output', handleLlmOutput, {
+    name: 'wa-archive:llm-output',
+    description: 'Track token usage and costs per LLM call',
+  });
 
   // 5. Register tools
   const allowFrom = config.allowFrom || [];
