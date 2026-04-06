@@ -6,6 +6,7 @@ interface SearchParams {
   sender?: string;
   chat?: string;
   chat_type?: string;
+  channel?: string;
   from_date?: string;
   to_date?: string;
   mode?: 'fts' | 'semantic' | 'hybrid';
@@ -28,6 +29,8 @@ export function buildWaSearchTool(allowFrom: string[]) {
     name: 'wa_search',
     description:
       'Search the WhatsApp message archive. Supports full-text search, semantic/vector search, or hybrid mode. Can filter by sender, chat, chat type, and date range.',
+    // NOTE: This tool also archives Slack messages when the slack channel is enabled.
+    // Use the "channel" filter to search within a specific platform.
     parameters: {
       type: 'object' as const,
       properties: {
@@ -47,6 +50,11 @@ export function buildWaSearchTool(allowFrom: string[]) {
           type: 'string',
           enum: ['group', 'direct'],
           description: 'Filter by chat type',
+        },
+        channel: {
+          type: 'string',
+          enum: ['whatsapp', 'slack'],
+          description: 'Filter by messaging platform (whatsapp or slack). Omit to search all.',
         },
         from_date: {
           type: 'string',
@@ -96,6 +104,7 @@ async function executeSearch(params: SearchParams): Promise<object> {
       sender: params.sender,
       chat: params.chat,
       chatType: params.chat_type,
+      channel: params.channel,
       fromTs,
       toTs,
       limit,
@@ -108,6 +117,7 @@ async function executeSearch(params: SearchParams): Promise<object> {
       sender: params.sender,
       chat: params.chat,
       chatType: params.chat_type,
+      channel: params.channel,
       fromTs,
       toTs,
       limit,
@@ -127,6 +137,7 @@ interface FilterOpts {
   sender?: string;
   chat?: string;
   chatType?: string;
+  channel?: string;
   fromTs?: number | null;
   toTs?: number | null;
   limit: number;
@@ -147,6 +158,10 @@ function buildWhereClause(opts: FilterOpts): { where: string; params: Record<str
   if (opts.chatType) {
     conditions.push('m.chat_type = @chatType');
     params.chatType = opts.chatType;
+  }
+  if (opts.channel) {
+    conditions.push('m.channel = @channel');
+    params.channel = opts.channel;
   }
   if (opts.fromTs) {
     conditions.push('m.timestamp >= @fromTs');

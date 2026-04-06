@@ -10,10 +10,15 @@ export function setOutboundSenderName(name: string): void {
   outboundSenderName = name;
 }
 
-/** Derive whether a chat ID represents a group (WhatsApp groups end with @g.us) */
+/** Channels we archive. Add new channels here to extend coverage. */
+const SUPPORTED_CHANNELS = new Set(['whatsapp', 'slack']);
+
+/** Derive whether a chat ID represents a group */
 function deriveIsGroup(chatId: string | undefined, metadata: any, ctx: any): boolean {
   if (metadata.isGroup === true || ctx.isGroup === true) return true;
-  if (chatId && chatId.endsWith('@g.us')) return true;
+  if (chatId && chatId.endsWith('@g.us')) return true; // WhatsApp groups
+  // Slack: channels (C*) are group-like, DMs (D*) are direct
+  if (chatId && /^C[A-Z0-9]+$/.test(chatId)) return true;
   return false;
 }
 
@@ -33,9 +38,9 @@ export function handleMessageReceived(event: any): void {
   try {
     const ctx = event?.context || event;
     const metadata = ctx.metadata || event.metadata || {};
-    const channelId = ctx.channelId || ctx.channel || metadata.channel || metadata.provider;
-    // Skip non-whatsapp if channelId is known and not whatsapp
-    if (channelId && channelId !== 'whatsapp') return;
+    const channelId = ctx.channelId || ctx.channel || metadata.channel || metadata.provider || 'whatsapp';
+    // Skip channels we don't archive
+    if (channelId && !SUPPORTED_CHANNELS.has(channelId)) return;
 
     const messageId = ctx.messageId || ctx.id || event.messageId || randomUUID();
     const chatId = resolveChatId(ctx, metadata, ctx.from || event.from);
@@ -58,7 +63,7 @@ export function handleMessageReceived(event: any): void {
       reply_to_id: metadata.quotedMessageId || null,
       is_from_me: 0,
       direction: 'inbound',
-      channel: 'whatsapp',
+      channel: channelId || 'whatsapp',
       account_id: ctx.accountId || null,
       metadata: Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : null,
       created_at: Date.now(),
@@ -87,8 +92,8 @@ export function handleMessageSent(event: any): void {
   try {
     const ctx = event?.context || event;
     const metadata = ctx.metadata || event.metadata || {};
-    const channelId = ctx.channelId || ctx.channel || metadata.channel || metadata.provider;
-    if (channelId && channelId !== 'whatsapp') return;
+    const channelId = ctx.channelId || ctx.channel || metadata.channel || metadata.provider || 'whatsapp';
+    if (channelId && !SUPPORTED_CHANNELS.has(channelId)) return;
     if (ctx.success === false) return;
 
     const messageId = ctx.messageId || ctx.id || event.messageId || randomUUID();
@@ -113,7 +118,7 @@ export function handleMessageSent(event: any): void {
       reply_to_id: null,
       is_from_me: 1,
       direction: 'outbound',
-      channel: 'whatsapp',
+      channel: channelId || 'whatsapp',
       account_id: ctx.accountId || null,
       metadata: null,
       created_at: Date.now(),
@@ -138,7 +143,7 @@ export function handleMessageSending(
   ctx: { channelId: string; accountId?: string; conversationId?: string; sessionKey?: string }
 ): void {
   try {
-    if (ctx.channelId && ctx.channelId !== 'whatsapp') return;
+    if (ctx.channelId && !SUPPORTED_CHANNELS.has(ctx.channelId)) return;
 
     const content = event.content;
     if (!content || content.trim() === 'NO_REPLY' || content.trim() === 'HEARTBEAT_OK') return;
@@ -165,7 +170,7 @@ export function handleMessageSending(
       reply_to_id: null,
       is_from_me: 1,
       direction: 'outbound',
-      channel: 'whatsapp',
+      channel: ctx.channelId || 'whatsapp',
       account_id: ctx.accountId || null,
       metadata: null,
       created_at: Date.now(),
@@ -187,7 +192,7 @@ export function handleMessagePreprocessed(event: any): void {
     const ctx = event?.context || event;
     const metadata = ctx.metadata || event.metadata || {};
     const channelId = ctx.channelId || ctx.channel || metadata.channel || metadata.provider;
-    if (channelId && channelId !== 'whatsapp') return;
+    if (channelId && !SUPPORTED_CHANNELS.has(channelId)) return;
 
     const messageId = ctx.messageId || ctx.id;
     if (!messageId) return;
