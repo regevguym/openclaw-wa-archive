@@ -58,30 +58,60 @@ export function initDb(dataDir: string): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_messages_chat_type ON messages(chat_type);
   `);
 
-  // Create FTS5 virtual table
+  // Create FTS5 virtual table (with sender_name + chat_name for richer search)
   db.exec(`
     CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
       content,
+      sender_name,
+      chat_name,
       content='messages',
       content_rowid='rowid'
     );
   `);
 
+  // Migration: if FTS exists but lacks sender_name/chat_name columns, rebuild it
+  try {
+    db.exec(`INSERT INTO messages_fts(messages_fts) VALUES('integrity-check')`);
+    // Quick probe: try a dummy query referencing sender_name
+    db.prepare(`SELECT rowid FROM messages_fts WHERE sender_name MATCH 'probe' LIMIT 0`).all();
+  } catch {
+    // FTS schema mismatch — rebuild
+    console.log('[wa-archive] Rebuilding FTS table to add sender_name + chat_name columns...');
+    db.exec(`DROP TRIGGER IF EXISTS messages_ai`);
+    db.exec(`DROP TRIGGER IF EXISTS messages_ad`);
+    db.exec(`DROP TRIGGER IF EXISTS messages_au`);
+    db.exec(`DROP TABLE IF EXISTS messages_fts`);
+    db.exec(`
+      CREATE VIRTUAL TABLE messages_fts USING fts5(
+        content,
+        sender_name,
+        chat_name,
+        content='messages',
+        content_rowid='rowid'
+      );
+    `);
+    db.exec(`
+      INSERT INTO messages_fts(rowid, content, sender_name, chat_name)
+      SELECT rowid, content, sender_name, chat_name FROM messages;
+    `);
+    console.log('[wa-archive] FTS rebuild complete');
+  }
+
   // Triggers to keep FTS in sync
   db.exec(`
     CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
-      INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
+      INSERT INTO messages_fts(rowid, content, sender_name, chat_name) VALUES (new.rowid, new.content, new.sender_name, new.chat_name);
     END;
   `);
   db.exec(`
     CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
-      INSERT INTO messages_fts(messages_fts, rowid, content) VALUES('delete', old.rowid, old.content);
+      INSERT INTO messages_fts(messages_fts, rowid, content, sender_name, chat_name) VALUES('delete', old.rowid, old.content, old.sender_name, old.chat_name);
     END;
   `);
   db.exec(`
     CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON messages BEGIN
-      INSERT INTO messages_fts(messages_fts, rowid, content) VALUES('delete', old.rowid, old.content);
-      INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
+      INSERT INTO messages_fts(messages_fts, rowid, content, sender_name, chat_name) VALUES('delete', old.rowid, old.content, old.sender_name, old.chat_name);
+      INSERT INTO messages_fts(rowid, content, sender_name, chat_name) VALUES (new.rowid, new.content, new.sender_name, new.chat_name);
     END;
   `);
 
