@@ -4,6 +4,7 @@ interface StatsParams {
   period?: 'today' | 'week' | 'month' | 'all';
   chat?: string;
   sender?: string;
+  channel?: string;
 }
 
 export function buildWaStatsTool(allowFrom: string[]) {
@@ -26,6 +27,11 @@ export function buildWaStatsTool(allowFrom: string[]) {
         sender: {
           type: 'string',
           description: 'Filter by specific sender name or phone',
+        },
+        channel: {
+          type: 'string',
+          enum: ['whatsapp', 'slack'],
+          description: 'Filter by messaging platform. Omit for combined stats.',
         },
       },
     },
@@ -59,6 +65,10 @@ function executeStats(params: StatsParams): object {
   if (params.sender) {
     conditions.push('(sender_name LIKE @sender OR sender_id LIKE @sender)');
     bindParams.sender = `%${params.sender}%`;
+  }
+  if (params.channel) {
+    conditions.push('channel = @channel');
+    bindParams.channel = params.channel;
   }
 
   const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
