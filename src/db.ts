@@ -280,6 +280,29 @@ export function updateMessageUsage(messageId: string, usage: UsageData): void {
   });
 }
 
+/**
+ * Check if a recent outbound message with the same content already exists for this chat.
+ * Used to deduplicate when multiple hooks capture the same outbound message.
+ * Returns true if a duplicate exists within the time window.
+ */
+export function hasRecentOutbound(chatId: string, content: string, windowMs: number = 5000): boolean {
+  const now = Date.now();
+  const sql = `
+    SELECT 1 FROM messages
+    WHERE chat_id = @chat_id
+      AND direction = 'outbound'
+      AND content = @content
+      AND timestamp > @since
+    LIMIT 1
+  `;
+  const row = getStmt(sql).get({
+    chat_id: chatId,
+    content,
+    since: now - windowMs,
+  });
+  return !!row;
+}
+
 export function insertBatch(messages: MessageRow[]): void {
   const transaction = getDb().transaction((msgs: MessageRow[]) => {
     for (const msg of msgs) {

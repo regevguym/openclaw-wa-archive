@@ -1,10 +1,16 @@
 import { randomUUID } from 'crypto';
-import { insertMessage, updateMessageContent } from './db';
+import { insertMessage, updateMessageContent, hasRecentOutbound } from './db';
 import { queueEmbedding } from './embeddings';
 import { queueMediaDownload } from './media';
 import { attachUsageToMessage } from './costs';
 
 let outboundSenderName = 'Me';
+
+/** Debug logging for hook diagnostics */
+function debugLog(hook: string, chatId: string, contentPreview?: string): void {
+  const preview = contentPreview ? contentPreview.slice(0, 60).replace(/\n/g, ' ') : '(no content)';
+  console.log(`[wa-archive] ${hook} fired: chat=${chatId} content="${preview}..."`);
+}
 
 export function setOutboundSenderName(name: string): void {
   outboundSenderName = name;
@@ -39,11 +45,12 @@ export function handleMessageReceived(event: any): void {
     const ctx = event?.context || event;
     const metadata = ctx.metadata || event.metadata || {};
     const channelId = ctx.channelId || ctx.channel || metadata.channel || metadata.provider || 'whatsapp';
+    const chatId = resolveChatId(ctx, metadata, ctx.from || event.from);
+    debugLog('message_received', chatId, ctx.content || ctx.body || event.content);
     // Skip channels we don't archive
     if (channelId && !SUPPORTED_CHANNELS.has(channelId)) return;
 
     const messageId = ctx.messageId || ctx.id || event.messageId || randomUUID();
-    const chatId = resolveChatId(ctx, metadata, ctx.from || event.from);
     const isGroup = deriveIsGroup(chatId, metadata, ctx);
     const chatType = isGroup ? 'group' : 'direct';
 
@@ -93,11 +100,12 @@ export function handleMessageSent(event: any): void {
     const ctx = event?.context || event;
     const metadata = ctx.metadata || event.metadata || {};
     const channelId = ctx.channelId || ctx.channel || metadata.channel || metadata.provider || 'whatsapp';
+    const chatId = resolveChatId(ctx, metadata, ctx.to || event.to);
+    debugLog('message_sent', chatId, ctx.content || ctx.body || event.content);
     if (channelId && !SUPPORTED_CHANNELS.has(channelId)) return;
     if (ctx.success === false) return;
 
     const messageId = ctx.messageId || ctx.id || event.messageId || randomUUID();
-    const chatId = resolveChatId(ctx, metadata, ctx.to || event.to);
     const isGroup = deriveIsGroup(chatId, metadata, ctx);
     const chatType = isGroup ? 'group' : 'direct';
 
@@ -143,6 +151,7 @@ export function handleMessageSending(
   ctx: { channelId: string; accountId?: string; conversationId?: string; sessionKey?: string }
 ): void {
   try {
+    debugLog('message_sending', event.to || ctx.conversationId || '?', event.content);
     if (ctx.channelId && !SUPPORTED_CHANNELS.has(ctx.channelId)) return;
 
     const content = event.content;
@@ -184,6 +193,67 @@ export function handleMessageSending(
     }
   } catch (err) {
     console.error('[wa-archive] Error processing sending message:', err);
+  }
+}
+
+/**
+ * Fallback capture via reply_dispatch hook.
+ * This fires when the gateway dispatches a reply, before channel-specific delivery.
+ * Acts as safety net if message_sending doesn't fire for some code paths.
+ */
+export function handleReplyDispatch(event: any, ctx: any): void {
+  try {
+    const channel = ctx?.channelId || event?.channelId;
+    if (channel && !SUPPORTED_CHANNELS.has(channel)) return;
+
+    const content = event?.content || event?.text || event?.body;
+    const to = event?.to || ctx?.conversationId || ctx?.to;
+    debugLog('reply_dispatch', to || '?', content);
+
+    if (!content || content.trim() === 'NO_REPLY' || content.trim() === 'HEARTBEAT_OK') return;
+    if (!to) return;
+
+    // Dedup: skip if message_sending already captured this exact message
+    if (hasRecentOutbound(to, content, 10000)) {
+      debugLog('reply_dispatch:DEDUP', to, content);
+      return;
+    }
+
+    const isGroup = to.endsWith?.('@g.us') || false;
+    const chatType = isGroup ? 'group' : 'direct';
+    const sessionKey = ctx?.sessionKey || event?.sessionKey || null;
+
+    // Safety net insert — only reaches here if message_sending didn't capture it
+    console.log(`[wa-archive] reply_dispatch SAFETY NET captured message to ${to} (${content.length} chars)`);
+    insertMessage({
+      id: `rd-${randomUUID()}`,
+      session_key: sessionKey,
+      chat_id: to,
+      chat_type: chatType,
+      chat_name: null,
+      sender_id: null,
+      sender_name: outboundSenderName,
+      timestamp: Date.now(),
+      content,
+      media_local_path: null,
+      media_url: null,
+      media_type: null,
+      reply_to_id: null,
+      is_from_me: 1,
+      direction: 'outbound',
+      channel: 'whatsapp',
+      account_id: ctx?.accountId || null,
+      metadata: JSON.stringify({ capturedVia: 'reply_dispatch' }),
+      created_at: Date.now(),
+    });
+
+    queueEmbedding(`rd-${to}-${Date.now()}`, content);
+
+    if (sessionKey) {
+      attachUsageToMessage(`rd-${to}-${Date.now()}`, sessionKey);
+    }
+  } catch (err) {
+    console.error('[wa-archive] Error processing reply_dispatch:', err);
   }
 }
 

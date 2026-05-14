@@ -2,7 +2,7 @@ import path from 'path';
 import { initDb, closeDb } from './db';
 import { configureEmbeddings } from './embeddings';
 import { configureMedia } from './media';
-import { handleMessageReceived, handleMessageSent, handleMessagePreprocessed, handleMessageSending, setOutboundSenderName } from './ingest';
+import { handleMessageReceived, handleMessageSent, handleMessagePreprocessed, handleMessageSending, handleReplyDispatch, setOutboundSenderName } from './ingest';
 import { buildWaSearchTool } from './tools/wa-search';
 import { buildWaStatsTool } from './tools/wa-stats';
 import { runBackfill, setBackfillSenderName } from './backfill';
@@ -50,6 +50,12 @@ export function register(api: any) {
   api.registerHook?.('message_sending', handleMessageSending, {
     name: 'wa-archive:message-sending',
     description: 'Archive outbound messages before delivery',
+  });
+
+  // Fallback: reply_dispatch fires when gateway dispatches a reply (safety net)
+  api.registerHook?.('reply_dispatch', handleReplyDispatch, {
+    name: 'wa-archive:reply-dispatch',
+    description: 'Fallback capture for outbound messages via reply dispatch',
   });
 
   // LLM output hook for token usage / cost tracking
